@@ -1,5 +1,5 @@
 import tkinter as tk
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, UnidentifiedImageError
 import threading
 import random
 import time
@@ -11,26 +11,13 @@ from playsound import playsound
 from pynput.mouse import Controller as MouseController
 from pynput.keyboard import Listener as KeyListener
 
-# --- Asset Paths ---
-FLYING_SETS = [
-    sorted(glob.glob("assets/flya1_*.png")),
-    sorted(glob.glob("assets/flya2_*.png")),
-    sorted(glob.glob("assets/flya3_*.png")),
-    sorted(glob.glob("assets/flya4_*.png")),
-]
-
-STANDING_SETS = [
-    sorted(glob.glob("assets/standa1_*.png")),
-    sorted(glob.glob("assets/standa2_*.png")),
-    sorted(glob.glob("assets/standa3_*.png")),
-    sorted(glob.glob("assets/standa4_*.png")),
-]
-
+# === Asset Paths ===
+FLYING_SETS = [sorted(glob.glob(f"assets/flya{i}_*.png")) for i in range(1, 5)]
+STANDING_SETS = [sorted(glob.glob(f"assets/standa{i}_*.png")) for i in range(1, 5)]
 MYNA_SOUND_PATH = "assets/myna_call.wav"
 
-# --- Constants ---
-BIRD_WIDTH = 360
-BIRD_HEIGHT = 360
+# === Constants ===
+BIRD_WIDTH, BIRD_HEIGHT = 360, 360
 animation_speed_multiplier = 1.0
 active_zones = []
 curse_active = False
@@ -40,13 +27,20 @@ main_root = tk.Tk()
 main_root.withdraw()
 mouse = MouseController()
 
-# --- Animation ---
+# === Animation Helpers ===
 def load_frames(file_list):
-    return [ImageTk.PhotoImage(Image.open(f).resize((BIRD_WIDTH, BIRD_HEIGHT))) for f in file_list]
+    frames = []
+    for f in file_list:
+        try:
+            image = Image.open(f).convert("RGBA").resize((BIRD_WIDTH, BIRD_HEIGHT))
+            frames.append(ImageTk.PhotoImage(image))
+        except (UnidentifiedImageError, FileNotFoundError) as e:
+            print(f"⚠️ Skipping invalid image: {f} ({e})")
+    return frames
 
 def animate_frames(label, frames, delay, control):
     def loop(i=0):
-        if not control.get("running", True):
+        if not control.get("running", True) or not label.winfo_exists():
             return
         label.configure(image=frames[i])
         label.image = frames[i]
@@ -56,34 +50,40 @@ def animate_frames(label, frames, delay, control):
 
 def stop_animation(control, label):
     control["running"] = False
-    if "job" in control:
-        label.after_cancel(control["job"])
+    if control.get("job") and label.winfo_exists():
+        try:
+            label.after_cancel(control["job"])
+        except Exception as e:
+            print(f"⚠️ Failed to cancel animation: {e}")
 
 def play_sound(path):
+    if not os.path.exists(path): return
     try:
         threading.Thread(target=playsound, args=(path,), daemon=True).start()
     except Exception as e:
-        print("🎧 Sound error:", e)
+        print(f"🎧 Sound error: {e}")
 
 def fly_away(window, x, y):
-    screen_w = window.winfo_screenwidth()
-    screen_h = window.winfo_screenheight()
+    screen_w, screen_h = window.winfo_screenwidth(), window.winfo_screenheight()
     target_x, target_y = random.choice([(0, 0), (screen_w, 0), (0, screen_h), (screen_w, screen_h)])
     steps = 150
-    dx = (target_x - x) / steps
-    dy = (target_y - y) / steps
+    dx, dy = (target_x - x) / steps, (target_y - y) / steps
+
     for _ in range(steps):
         x += dx
         y += dy
-        window.geometry(f"{BIRD_WIDTH}x{BIRD_HEIGHT}+{int(x)}+{int(y)}")
-        window.update()
+        if window.winfo_exists():
+            window.geometry(f"{BIRD_WIDTH}x{BIRD_HEIGHT}+{int(x)}+{int(y)}")
+            window.update()
         time.sleep(0.03 * animation_speed_multiplier)
+
     zone = (int(x) // 100, int(y) // 100)
     if zone in active_zones:
         active_zones.remove(zone)
-    window.destroy()
+    if window.winfo_exists():
+        window.destroy()
 
-# --- Speed Control ---
+# === Speed Controls ===
 def apply_slowdown():
     global animation_speed_multiplier
     animation_speed_multiplier = 2.0
@@ -101,11 +101,11 @@ def reset_speed_after(duration):
     animation_speed_multiplier = 1.0
     print("🔄 Speed reset")
 
-# --- Curse Indicator ---
+# === Curse Indicator ===
 def show_curse_indicator():
     global curse_indicator
-    if curse_indicator:
-        return
+    if curse_indicator: return
+
     curse_indicator = tk.Toplevel()
     curse_indicator.overrideredirect(True)
     curse_indicator.wm_attributes("-topmost", True)
@@ -113,6 +113,12 @@ def show_curse_indicator():
     label = tk.Label(curse_indicator, text="☠️ CURSED", fg="red", bg="black", font=("Arial", 14, "bold"))
     label.pack()
     update_curse_indicator_position()
+
+def update_curse_indicator_position():
+    if curse_indicator and curse_indicator.winfo_exists():
+        screen_w = main_root.winfo_screenwidth()
+        curse_indicator.geometry(f"+{int(screen_w / 2 - 70)}+20")
+        curse_indicator.after(1000, update_curse_indicator_position)
 
 def hide_curse_indicator():
     global curse_indicator
@@ -123,23 +129,13 @@ def hide_curse_indicator():
             pass
         curse_indicator = None
 
-def update_curse_indicator_position():
-    global curse_indicator
-    if curse_indicator:
-        screen_w = main_root.winfo_screenwidth()
-        screen_h = main_root.winfo_screenheight()
-        curse_indicator.geometry(f"+{screen_w - 140}+{screen_h - 80}")
-        curse_indicator.after(1000, update_curse_indicator_position)
-
-# --- Persistent Curse Behavior ---
+# === Curse Effects ===
 def cursed_cursor_drift():
     while True:
         if curse_active:
-            x, y = mouse.position
-            drift_x = random.randint(-15, 15)
-            drift_y = random.randint(-15, 15)
             try:
-                mouse.position = (x - drift_x, y - drift_y)
+                x, y = mouse.position
+                mouse.position = (x - random.randint(-15, 15), y - random.randint(-15, 15))
             except:
                 pass
         time.sleep(0.3)
@@ -149,12 +145,11 @@ def cursed_keyboard_scramble():
         if not curse_active:
             return
         try:
-            if hasattr(key, 'char') and key.char:
-                if random.random() < 0.15:
-                    fake = random.choice("qwertyuiopasdfghjklzxcvbnm1234567890")
-                    print(f"🧿 Key '{key.char}' replaced with '{fake}'")
-                    keyboard.write(fake)
-                    return False
+            if hasattr(key, 'char') and key.char and random.random() < 0.15:
+                fake = random.choice("abcdefghijklmnopqrstuvwxyz1234567890")
+                print(f"🧿 Replacing '{key.char}' with '{fake}'")
+                keyboard.write(fake)
+                return False
         except:
             pass
 
@@ -167,7 +162,7 @@ def cursed_keyboard_scramble():
         else:
             time.sleep(1)
 
-# --- Bird ---
+# === Bird Logic ===
 def show_myna():
     bird_window = tk.Toplevel()
     bird_window.overrideredirect(True)
@@ -189,51 +184,68 @@ def show_myna():
         return
 
     entry_from = random.choice(["left", "right", "top"])
-    start_x, start_y = (-BIRD_WIDTH, landing_y) if entry_from == "left" else \
-                       (screen_w + BIRD_WIDTH, landing_y) if entry_from == "right" else \
-                       (landing_x, -BIRD_HEIGHT)
+    start_x, start_y = {
+        "left": (-BIRD_WIDTH, landing_y),
+        "right": (screen_w + BIRD_WIDTH, landing_y),
+        "top": (landing_x, -BIRD_HEIGHT)
+    }[entry_from]
 
     label = tk.Label(bird_window, bg="white")
     label.pack()
 
     def bird_life():
-        play_sound(MYNA_SOUND_PATH)
+        try:
+            play_sound(MYNA_SOUND_PATH)
 
-        fly_in_frames = load_frames(random.choice(FLYING_SETS))
-        fly_in_ctrl = {"running": True}
-        animate_frames(label, fly_in_frames, delay=90, control=fly_in_ctrl)
+            fly_in_frames = load_frames(random.choice(FLYING_SETS))
+            fly_in_ctrl = {"running": True}
+            animate_frames(label, fly_in_frames, delay=90, control=fly_in_ctrl)
 
-        steps = 150
-        current_x, current_y = start_x, start_y
-        dx = (landing_x - start_x) / steps
-        dy = (landing_y - start_y) / steps
-        for _ in range(steps):
-            current_x += dx
-            current_y += dy
-            bird_window.geometry(f"{BIRD_WIDTH}x{BIRD_HEIGHT}+{int(current_x)}+{int(current_y)}")
-            bird_window.update()
-            time.sleep(0.025 * animation_speed_multiplier)
+            steps = 150
+            current_x, current_y = start_x, start_y
+            dx, dy = (landing_x - start_x) / steps, (landing_y - start_y) / steps
+            for _ in range(steps):
+                current_x += dx
+                current_y += dy
+                if bird_window.winfo_exists():
+                    bird_window.geometry(f"{BIRD_WIDTH}x{BIRD_HEIGHT}+{int(current_x)}+{int(current_y)}")
+                    bird_window.update()
+                time.sleep(0.025 * animation_speed_multiplier)
 
-        stop_animation(fly_in_ctrl, label)
-        time.sleep(0.3 * animation_speed_multiplier)
+            stop_animation(fly_in_ctrl, label)
+            time.sleep(0.3 * animation_speed_multiplier)
 
-        standing_frames = load_frames(random.choice(STANDING_SETS))
-        stand_ctrl = {"running": True}
-        animate_frames(label, standing_frames, delay=120, control=stand_ctrl)
+            standing_frames = load_frames(random.choice(STANDING_SETS))
+            stand_ctrl = {"running": True}
+            animate_frames(label, standing_frames, delay=120, control=stand_ctrl)
 
-        time.sleep(random.randint(8, 12) * animation_speed_multiplier)
-        stop_animation(stand_ctrl, label)
+            time.sleep(random.randint(8, 12) * animation_speed_multiplier)
+            stop_animation(stand_ctrl, label)
 
-        fly_out_frames = load_frames(random.choice(FLYING_SETS))
-        fly_out_ctrl = {"running": True}
-        animate_frames(label, fly_out_frames, delay=85, control=fly_out_ctrl)
+            fly_out_frames = load_frames(random.choice(FLYING_SETS))
+            fly_out_ctrl = {"running": True}
+            animate_frames(label, fly_out_frames, delay=85, control=fly_out_ctrl)
 
-        time.sleep(0.8 * animation_speed_multiplier)
-        fly_away(bird_window, landing_x, landing_y)
+            time.sleep(0.8 * animation_speed_multiplier)
+            fly_away(bird_window, landing_x, landing_y)
+
+        except Exception as e:
+            print(f"🐦 Error in bird_life: {e}")
 
     threading.Thread(target=bird_life, daemon=True).start()
 
-# --- Omen Logic ---
+# === Topmost Alert Fix ===
+def force_alert(message, title="Notice"):
+    def show():
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        pyautogui.alert(message, title)
+        root.destroy()
+
+    threading.Thread(target=show).start()
+
+# === Omen Logic ===
 def trigger_omen():
     global curse_active
     num_birds = random.choice([1, 2])
@@ -242,27 +254,21 @@ def trigger_omen():
     time.sleep(1)
 
     if num_birds == 1:
-        pyautogui.alert("☠️ You are cursed by the lonely Myna!\n\n'One for sorrow...'", title="Bad Omen")
+        force_alert("☠️ You are cursed by the lonely Myna!\n\n'One for sorrow...'", "Bad Omen")
         apply_slowdown()
         curse_active = True
         show_curse_indicator()
-        trigger_curse()
+        force_alert("😱 Things might go wrong today!", "Bad Omen")
     else:
-        pyautogui.alert("✨ You are blessed by the Myna duo!\n\n'Two for joy!'", title="Good Omen")
+        force_alert("✨ You are blessed by the Myna duo!\n\n'Two for joy!'", "Good Omen")
         if curse_active:
-            pyautogui.alert("💫 The curse has been lifted!", title="Relief")
+            force_alert("💫 The curse has been lifted!", "Relief")
         curse_active = False
         hide_curse_indicator()
         apply_boost()
-        trigger_blessing()
+        force_alert("🌈 Everything feels lighter and joyful!", "Good Omen")
 
-def trigger_curse():
-    pyautogui.alert("😱 Things might go wrong today!", title="Bad Omen")
-
-def trigger_blessing():
-    pyautogui.alert("🌈 Everything feels lighter and joyful!", title="Good Omen")
-
-# --- Background Threads ---
+# === Startup Threads ===
 def start_loop():
     while True:
         time.sleep(random.randint(20, 40))
@@ -273,9 +279,10 @@ def quit_listener():
     keyboard.wait("ctrl+shift+q")
     os._exit(0)
 
-# --- Start ---
-threading.Thread(target=start_loop, daemon=True).start()
-threading.Thread(target=quit_listener, daemon=True).start()
-threading.Thread(target=cursed_cursor_drift, daemon=True).start()
-threading.Thread(target=cursed_keyboard_scramble, daemon=True).start()
-main_root.mainloop()
+# === Launch App ===
+if __name__ == "__main__":
+    threading.Thread(target=start_loop, daemon=True).start()
+    threading.Thread(target=quit_listener, daemon=True).start()
+    threading.Thread(target=cursed_cursor_drift, daemon=True).start()
+    threading.Thread(target=cursed_keyboard_scramble, daemon=True).start()
+    main_root.mainloop()
