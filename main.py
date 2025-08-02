@@ -7,14 +7,23 @@ import pyautogui
 import keyboard
 import os
 import glob
+import sys
 from playsound import playsound
 from pynput.mouse import Controller as MouseController
 from pynput.keyboard import Listener as KeyListener
 
+# === Helper to resolve paths (works with PyInstaller) ===
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS  # when using PyInstaller
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # === Asset Paths ===
-FLYING_SETS = [sorted(glob.glob(f"assets/flya{i}_*.png")) for i in range(1, 5)]
-STANDING_SETS = [sorted(glob.glob(f"assets/standa{i}_*.png")) for i in range(1, 5)]
-MYNA_SOUND_PATH = "assets/myna_call.wav"
+FLYING_SETS = [sorted(glob.glob(resource_path(f"assets/flya{i}_*.png"))) for i in range(1, 5)]
+STANDING_SETS = [sorted(glob.glob(resource_path(f"assets/standa{i}_*.png"))) for i in range(1, 5)]
+MYNA_SOUND_PATH = resource_path("assets/myna_call.wav")
 
 # === Constants ===
 BIRD_WIDTH, BIRD_HEIGHT = 360, 360
