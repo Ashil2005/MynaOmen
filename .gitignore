@@ -1,0 +1,32 @@
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore OS/system files
+.DS_Store
+Thumbs.db
+
+# Ignore environment files (if you use virtualenv later)
+env/
+venv/
+ENV/
+.venv/
+
+# Ignore logs or backups
+*.log
+*.bak
+*.tmp
+
+# Ignore compiled bytecode or metadata
+*.pyc
+*.pyd
+
+# Ignore GitHub CLI temp if any
+*.gh.json
+
+# Ignore large asset output (optional, your choice)
+assets_transparent/
