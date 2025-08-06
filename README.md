@@ -60,15 +60,15 @@ python main.py
 For Software:
 
 # Screenshots (Add at least 3)
-![Screenshot1]((https://drive.google.com/file/d/1vEu0ROdiKKbCUT80Uv11uqGQ8NIt-BHz/view?usp=sharing))
+![Screenshot1](https://drive.google.com/file/d/1vEu0ROdiKKbCUT80Uv11uqGQ8NIt-BHz/view?usp=sharing)
 *This screenshot shows the core section of the `main.py` code where all threads are started and the app enters the Tkinter event loop.*
 
 
-![Screenshot2]((https://drive.google.com/file/d/1K0C2EyJ-y01KRHHyF9WgMQIFRnS0nU8V/view?usp=sharing))
+![Screenshot2](https://drive.google.com/file/d/1K0C2EyJ-y01KRHHyF9WgMQIFRnS0nU8V/view?usp=sharing)
 *This snippet highlights the curse and blessing logic using pyautogui popups, the logic behind the randomness, and curse state handling.*
 
 
-![Screenshot3]((https://drive.google.com/file/d/1Yh2qvQB5ca-2wXE0EAiQ67eclww3rb82/view?usp=sharing))
+![Screenshot3](https://drive.google.com/file/d/1Yh2qvQB5ca-2wXE0EAiQ67eclww3rb82/view?usp=sharing)
 *A live view of the animated Myna bird mid-flight with the “Good Omen” message popup in the center — showing the project's UI in action.*
 
 
